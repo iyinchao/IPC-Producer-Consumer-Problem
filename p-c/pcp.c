@@ -48,7 +48,7 @@ char deQueue(CirQueue *Q)
     if(queueEmpty(Q))
     {
         perror("Queue underflow"); //队空下溢
-        return '\0';
+        return '*';
     }
     temp=Q->data[Q->front];
     Q->count--; //队列元素个数减1

@@ -71,7 +71,7 @@ int main(int argc, const char * argv[])
     }
     else if (status == 0) //若创建成功，以下为每个子进程都会执行的代码
     {
-        srand((unsigned)time(NULL));
+        
         //令生产者为当i＝0和2时创建的子进程，消费者为当i＝1和3时创建的子进程
         if(i%2 == 0)
         {
@@ -84,13 +84,18 @@ int main(int argc, const char * argv[])
                 return -1 ;
             }
             char temp;
-            for(int i = 0; i < 10; i++){
-                usleep(rand()%300000);
+            for(int i = 0; i < 10; i++)
+            {
                 temp = (char)(65+rand()%26);
+                //
+                P(sem_id, 0); //down sem:empty
+                P(sem_id, 2); //down sem:mutex
                 printf("produce %c: ",temp);
                 enQueue(buf, temp);
                 prQueue(buf);
                 fflush(stdout);
+                V(sem_id,2); //up sem:mutex
+                V(sem_id,1); //up sem:full
             }
             shmdt(buf);
             return 0;
@@ -107,10 +112,13 @@ int main(int argc, const char * argv[])
             }
             for(int i = 0; i < 10; i++)
             {
-                usleep(rand()%300000);
+                P(sem_id, 1); //down sem:full
+                P(sem_id, 2); //down sem:mutex
                 printf("consume %c: ",deQueue(buf));
                 prQueue(buf);
                 fflush(stdout);
+                V(sem_id,2); //up sem:mutex
+                V(sem_id,0); //up sem:empty
             }
             shmdt(buf);
             return 0;
