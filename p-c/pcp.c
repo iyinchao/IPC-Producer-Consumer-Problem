@@ -61,26 +61,26 @@ void prQueue(CirQueue *Q)
     if(queueEmpty(Q))
     {
         printf("Queue Empty\n");
-        return;
+    }else{
+        for(int i = 0; i < Q->count; i++)
+        {
+            printf("%c ",Q->data[(Q->front+i)%QueueSize]);
+        }
+        printf("\n");
     }
-    for(int i = 0; i < Q->count; i++)
-    {
-        printf("%c ",Q->data[(Q->front+i)%QueueSize]);
-    }
-    printf("\n");
 }
 
 ///////////////
 
 int P(int semid, int semnum)
 {
-    struct sembuf sops={semnum,-1, SEM_UNDO};
+    struct sembuf sops={semnum,-1, 0};
     return (semop(semid,&sops,1));
 }
 
 int V(int semid, int semnum)
 {
-    struct sembuf sops={semnum,+1, SEM_UNDO};
+    struct sembuf sops={semnum,+1, 0};
     return (semop(semid,&sops,1));
 }
 

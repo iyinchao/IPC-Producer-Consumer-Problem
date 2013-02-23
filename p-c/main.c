@@ -24,8 +24,9 @@ int main(int argc, const char * argv[])
     int i; //循环变量
     pid_t status;  //存储进程的pid，以区分是否为子进程
     union semun arg;
+    arg.val = 0;
     //获得IPC Key，以便信号量操作使用
-    int key = ftok("/tmp", 0x67 );
+    int key = ftok("/tmp", 0x66 );
     if ( key < 0 )
     {
         perror("ftok key error") ;
@@ -75,6 +76,7 @@ int main(int argc, const char * argv[])
         //令生产者为当i＝0和2时创建的子进程，消费者为当i＝1和3时创建的子进程
         if(i%2 == 0)
         {
+            srand((int)time(NULL));
             //生产者的代码
             //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
@@ -86,22 +88,26 @@ int main(int argc, const char * argv[])
             char temp;
             for(int i = 0; i < 10; i++)
             {
+                usleep(rand()%800000);
                 temp = (char)(65+rand()%26);
                 //
                 P(sem_id, 0); //down sem:empty
                 P(sem_id, 2); //down sem:mutex
+                
                 printf("produce %c: ",temp);
                 enQueue(buf, temp);
                 prQueue(buf);
-                fflush(stdout);
+                
                 V(sem_id,2); //up sem:mutex
                 V(sem_id,1); //up sem:full
+                
             }
             shmdt(buf);
             return 0;
         }
         else
         {
+            srand((int)time(NULL)+1);
             //消费者的代码
             //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
@@ -112,11 +118,13 @@ int main(int argc, const char * argv[])
             }
             for(int i = 0; i < 10; i++)
             {
+                usleep(rand()%800000);
                 P(sem_id, 1); //down sem:full
                 P(sem_id, 2); //down sem:mutex
+                
                 printf("consume %c: ",deQueue(buf));
                 prQueue(buf);
-                fflush(stdout);
+                
                 V(sem_id,2); //up sem:mutex
                 V(sem_id,0); //up sem:empty
             }
@@ -126,7 +134,7 @@ int main(int argc, const char * argv[])
     }
     else
     {
-        sleep(10);
+        sleep(30);
         int flag = shmctl( buf_id, IPC_RMID, NULL) ;
         if ( flag == -1 )
         {
