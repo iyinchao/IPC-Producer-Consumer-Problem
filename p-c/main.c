@@ -8,13 +8,8 @@
 //  Copyright (c) 2013年 Charles Yin. All rights reserved.
 //
 
-#include <stdio.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include<unistd.h>
-#include<sys/types.h>
-#include <err.h>
 #include "pcp.h"
+
 
 int main(int argc, const char * argv[])
 {
@@ -23,13 +18,46 @@ int main(int argc, const char * argv[])
     int buf_id = shmget(IPC_PRIVATE, sizeof(CirQueue), IPC_CREAT|IPC_EXCL|0600);
     if ( buf_id < 0 )
     {
-        perror("get shm  ipc_id error") ;
+        perror("get shm  ipc_id error");
         return -1 ;
     }
-    
     int i; //循环变量
-    pid_t status;  存储进程的pid，以区分是否为
-    
+    pid_t status;  //存储进程的pid，以区分是否为子进程
+    union semun arg;
+    //获得IPC Key，以便信号量操作使用
+    int key = ftok("/tmp", 0x67 );
+    if ( key < 0 )
+    {
+        perror("ftok key error") ;
+        return -1 ;
+    }
+    //创建一个信号量集（2个信号量）,令0号为empty，1号为full，2号为mutex
+    int sem_id = semget(key,3,IPC_CREAT|0600);
+    //为信号量设置初始值
+    arg.val = QueueSize;  //empty=N
+    int ret = semctl(sem_id,0,SETVAL,arg);
+    if (ret < 0 )
+    {
+        perror("ctl sem \"empty\" error");
+        semctl(sem_id,0,IPC_RMID,arg);
+        return -1 ;
+    }
+    arg.val = 0;  //full=0
+    ret = semctl(sem_id,1,SETVAL,arg);
+    if (ret < 0 )
+    {
+        perror("ctl sem \"full\" error");
+        semctl(sem_id,1,IPC_RMID,arg);
+        return -1 ;
+    }
+    arg.val = 1; //mutex=1
+    ret = semctl(sem_id,2,SETVAL,arg);
+    if (ret < 0 )
+    {
+        perror("ctl sem \"mutex\" error");
+        semctl(sem_id,2,IPC_RMID,arg);
+        return -1 ;
+    }
     //使用循环创建4个子进程（生产者和消费者）
     for(i = 0; i < 4; i++){
         status = fork();
@@ -43,47 +71,61 @@ int main(int argc, const char * argv[])
     }
     else if (status == 0) //若创建成功，以下为每个子进程都会执行的代码
     {
+        srand((unsigned)time(NULL));
         //令生产者为当i＝0和2时创建的子进程，消费者为当i＝1和3时创建的子进程
         if(i%2 == 0)
         {
             //生产者的代码
-            printf("producer %d,\n",i);
+            //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
             if ( (int)buf == -1 )
             {
                 perror("shmat addr error");
                 return -1 ;
             }
-            enQueue(buf, 'A');
+            char temp;
+            for(int i = 0; i < 10; i++){
+                usleep(rand()%300000);
+                temp = (char)(65+rand()%26);
+                printf("produce %c: ",temp);
+                enQueue(buf, temp);
+                prQueue(buf);
+                fflush(stdout);
+            }
             shmdt(buf);
             return 0;
         }
         else
         {
             //消费者的代码
-            printf("consumer %d,\n",i);
+            //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
             if ( (int)buf == -1 )
             {
                 perror("shmat addr error");
                 return -1 ;
             }
-            printf("%c\n",deQueue(buf));
+            for(int i = 0; i < 10; i++)
+            {
+                usleep(rand()%300000);
+                printf("consume %c: ",deQueue(buf));
+                prQueue(buf);
+                fflush(stdout);
+            }
             shmdt(buf);
             return 0;
         }
     }
     else
     {
-        sleep(3) ;
+        sleep(10);
         int flag = shmctl( buf_id, IPC_RMID, NULL) ;
         if ( flag == -1 )
         {
-            perror("shmctl shm error") ;
+            perror("shmctl shm error");
             return -1 ;
         }
-        printf("sdfsdf\n");
+        printf("done!\n");
     }
-    //printf("%d",buf_array);
     return 0;
 }
