@@ -60,7 +60,7 @@ void prQueue(CirQueue *Q)
 {
     if(queueEmpty(Q))
     {
-        printf("Queue Empty\n");
+        printf("[Queue Empty]\n");
     }else{
         for(int i = 0; i < Q->count; i++)
         {

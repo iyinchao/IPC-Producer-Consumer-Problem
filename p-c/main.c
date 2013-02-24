@@ -13,6 +13,8 @@
 
 int main(int argc, const char * argv[])
 {
+    struct timeval start_time;
+    gettimeofday(&start_time, NULL);
     
     //申请一块内存，并获取共享内存块的表识id
     int buf_id = shmget(IPC_PRIVATE, sizeof(CirQueue), IPC_CREAT|IPC_EXCL|0600);
@@ -21,10 +23,11 @@ int main(int argc, const char * argv[])
         perror("get shm  ipc_id error");
         return -1 ;
     }
+    
     int i; //循环变量
     pid_t status;  //存储进程的pid，以区分是否为子进程
-    union semun arg;
-    arg.val = 0;
+    union semun arg; //用于操作信号量的辅助联合体
+    
     //获得IPC Key，以便信号量操作使用
     int key = ftok("/tmp", 0x66 );
     if ( key < 0 )
@@ -59,13 +62,15 @@ int main(int argc, const char * argv[])
         semctl(sem_id,2,IPC_RMID,arg);
         return -1 ;
     }
+    
     //使用循环创建4个子进程（生产者和消费者）
     for(i = 0; i < 4; i++){
+        if(i%2==0)sleep(1); //每隔一秒创建一个新的进程，使得随机种子中的time函数发挥作用
         status = fork();
         //当发现处于子进程中，不继续fork，直接执行自己的代码
         if(status == 0 || status == -1) break;
-        
     }
+    
     if (status == -1)   //若进程创建失败
     {
         return -1;
@@ -76,8 +81,11 @@ int main(int argc, const char * argv[])
         //令生产者为当i＝0和2时创建的子进程，消费者为当i＝1和3时创建的子进程
         if(i%2 == 0)
         {
-            srand((int)time(NULL));
+            
             //生产者的代码
+            srand((int)time(NULL));
+            //if(i == 0)sleep(3);
+            //if(i == 2)sleep(1);
             //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
             if ( (int)buf == -1 )
@@ -85,19 +93,34 @@ int main(int argc, const char * argv[])
                 perror("shmat addr error");
                 return -1 ;
             }
+            struct timeval now_time; //记录当前操作发生的时间
+            long sec; //秒数
+            int msec; //毫秒数
             char temp;
             for(int i = 0; i < 10; i++)
             {
-                usleep(rand()%800000);
+                //usleep(rand()%900000);
+                sleep(rand()%4);
                 temp = (char)(65+rand()%26);
                 //
                 P(sem_id, 0); //down sem:empty
                 P(sem_id, 2); //down sem:mutex
                 
-                printf("produce %c: ",temp);
                 enQueue(buf, temp);
-                prQueue(buf);
                 
+                //处理运行时间记录
+                gettimeofday(&now_time, NULL);
+                sec = now_time.tv_sec-start_time.tv_sec;
+                msec = (now_time.tv_usec-start_time.tv_usec)/1000;
+                if(msec < 0)
+                {
+                    sec -= 1;
+                    msec += 1000;
+                }
+                //
+                printf("(%2ld.%03d)produce %c: ", sec, msec, temp);
+                prQueue(buf);
+                fflush(stdout); //刷新stdout的缓冲区，及时输出结果
                 V(sem_id,2); //up sem:mutex
                 V(sem_id,1); //up sem:full
                 
@@ -107,7 +130,8 @@ int main(int argc, const char * argv[])
         }
         else
         {
-            srand((int)time(NULL)+1);
+            srand((int)time(NULL));
+            //if(i == 1)sleep(2);
             //消费者的代码
             //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
@@ -116,15 +140,32 @@ int main(int argc, const char * argv[])
                 perror("shmat addr error");
                 return -1 ;
             }
+            struct timeval now_time; //记录当前操作发生的时间
+            long sec; //秒数
+            int msec; //毫秒数
+            char temp;
             for(int i = 0; i < 10; i++)
             {
-                usleep(rand()%800000);
+                //usleep(rand()%900000);
+                sleep(rand()%4);
                 P(sem_id, 1); //down sem:full
                 P(sem_id, 2); //down sem:mutex
                 
-                printf("consume %c: ",deQueue(buf));
-                prQueue(buf);
+                temp = deQueue(buf);
                 
+                //处理运行时间记录
+                gettimeofday(&now_time, NULL);
+                sec = now_time.tv_sec-start_time.tv_sec;
+                msec = (now_time.tv_usec-start_time.tv_usec)/1000;
+                if(msec < 0)
+                {
+                    sec -= 1;
+                    msec += 1000;
+                }
+                //
+                printf("(%2ld.%03d)consume %c: ", sec, msec, temp);
+                prQueue(buf);
+                fflush(stdout);
                 V(sem_id,2); //up sem:mutex
                 V(sem_id,0); //up sem:empty
             }
@@ -135,13 +176,17 @@ int main(int argc, const char * argv[])
     else
     {
         sleep(30);
-        int flag = shmctl( buf_id, IPC_RMID, NULL) ;
+        int flag = shmctl( buf_id, IPC_RMID, NULL);  //移除内存共享区域
         if ( flag == -1 )
         {
             perror("shmctl shm error");
             return -1 ;
         }
-        printf("done!\n");
+        //移除3个信号量
+        semctl(sem_id, 0, IPC_RMID,arg);
+        semctl(sem_id, 1, IPC_RMID,arg);
+        semctl(sem_id, 2, IPC_RMID,arg);
+        printf("\nOperation complete...\n");
     }
     return 0;
 }
