@@ -84,8 +84,7 @@ int main(int argc, const char * argv[])
             
             //生产者的代码
             srand((int)time(NULL));
-            //if(i == 0)sleep(3);
-            //if(i == 2)sleep(1);
+            printf("Producer '%d' created...\n", i);
             //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
             if ( (int)buf == -1 )
@@ -99,8 +98,7 @@ int main(int argc, const char * argv[])
             char temp;
             for(int i = 0; i < 10; i++)
             {
-                //usleep(rand()%900000);
-                sleep(rand()%4);
+                sleep(rand()%5);
                 temp = (char)(65+rand()%26);
                 //
                 P(sem_id, 0); //down sem:empty
@@ -130,9 +128,9 @@ int main(int argc, const char * argv[])
         }
         else
         {
-            srand((int)time(NULL));
-            //if(i == 1)sleep(2);
             //消费者的代码
+            printf("Consumer '%d' created...\n", i);
+            srand((int)time(NULL));
             //将共享的内存区域映射到自己的地址空间
             CirQueue* buf = (CirQueue*)shmat(buf_id, NULL, 0);
             if ( (int)buf == -1 )
@@ -146,8 +144,7 @@ int main(int argc, const char * argv[])
             char temp;
             for(int i = 0; i < 10; i++)
             {
-                //usleep(rand()%900000);
-                sleep(rand()%4);
+                sleep(rand()%5);
                 P(sem_id, 1); //down sem:full
                 P(sem_id, 2); //down sem:mutex
                 
@@ -175,7 +172,7 @@ int main(int argc, const char * argv[])
     }
     else
     {
-        sleep(30);
+        sleep(35); //也可用wait函数，但是容易过早执行，不能等到全部结果输出
         int flag = shmctl( buf_id, IPC_RMID, NULL);  //移除内存共享区域
         if ( flag == -1 )
         {
